@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Mosaic Solver | Board Analysis</title>
+		<link rel="stylesheet" href="style.css" />
+	</head>
+	<body>
+		<main class="app">
+			<aside class="panel" aria-label="Game controls">
+				<div class="brand-block">
+					<p class="eyebrow">Puzzle automation</p>
+					<h1>Mosaic Solver</h1>
+					<p class="hint">
+						Generate a board, import a screenshot, and review the solution step by step.
+					</p>
+				</div>
+
+				<button id="newGameBtn" class="primary">Create New Game</button>
+
+				<div id="configArea" class="config hidden">
+					<label>
+						Rows
+						<input id="rowsInput" type="number" min="3" max="20" value="10" />
+					</label>
+					<label>
+						Columns
+						<input id="colsInput" type="number" min="3" max="20" value="10" />
+					</label>
+					<label>
+						Solver Limit
+						<input id="movesInput" type="number" min="1" max="40" value="12" />
+					</label>
+
+					<div>
+						<p class="label-title">Allowed Colors</p>
+						<div id="colorOptions" class="color-options"></div>
+					</div>
+
+					<button id="generateBtn" class="primary">Generate</button>
+				</div>
+
+				<div class="import-box">
+					<p class="label-title">Image Mode</p>
+					<input id="imageInput" class="hidden-input" type="file" accept="image/*" />
+					<div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Drop a screenshot to analyze">
+						<strong>Drop screenshot here</strong>
+						<span>or click to choose an image</span>
+						<small>The parser detects the board and palette automatically.</small>
+					</div>
+						<button id="analyzeBtn" class="secondary">Analyze Image</button>
+				</div>
+
+				<div class="actions">
+					<button id="autoSolveBtn" class="secondary" disabled>
+						Done Painting &amp; Show Solution
+					</button>
+					<button id="resetPaintBtn" class="secondary" disabled>Reset Paint</button>
+				</div>
+
+				<div id="status" class="status" aria-live="polite">
+					Click Create New Game to begin.
+				</div>
+			</aside>
+
+			<section class="stage" aria-label="Game stage">
+				<div class="stage-grid">
+					<div class="board-wrap">
+						<section class="board-shell" aria-label="Game board">
+							<div id="board" class="board" role="grid" aria-label="Color matrix"></div>
+						</section>
+					</div>
+
+					<aside class="solution-panel hidden" id="solutionPanel" aria-label="Solution guide">
+						<div class="solution-header">
+							<h2>Solution</h2>
+							<p id="solutionSummary">No solution yet.</p>
+						</div>
+
+						<div class="solution-controls">
+							<button id="prevStepBtn" class="secondary" disabled>&larr; Step</button>
+							<div class="solution-count" id="solutionCount">0 / 0</div>
+							<button id="nextStepBtn" class="secondary" disabled>Step &rarr;</button>
+						</div>
+
+						<div id="solutionSteps" class="solution-steps" aria-label="Solution steps"></div>
+					</aside>
+				</div>
+
+				<section class="meta">
+					<p>Selected Color: <span id="selectedColorName">-</span></p>
+					<p>Solver Limit: <span id="movesLimitLabel">-</span></p>
+					<p>Step: <span id="movesUsedLabel">-</span></p>
+				</section>
+
+				<section class="palette" id="palette" aria-label="Color palette"></section>
+			</section>
+
+			<!-- Preview modal for image detection -->
+			<div id="previewModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Image preview and crop">
+				<div class="modal-content">
+					<header class="modal-header">
+						<h3>Preview & Crop</h3>
+						<button id="closePreview" class="secondary">Close</button>
+					</header>
+					<div class="preview-body">
+						<div class="preview-left">
+							<div class="preview-canvas">
+								<img id="previewImage" alt="Uploaded screenshot preview" />
+								<div id="previewOverlay" class="preview-overlay"></div>
+							</div>
+						</div>
+						<div class="preview-right">
+							<label>Left
+								<div class="slider-row">
+									<button type="button" class="small-btn dec" data-target="bboxLeft">−</button>
+									<input id="bboxLeft" type="range" min="0" max="1" step="0.001" />
+									<button type="button" class="small-btn inc" data-target="bboxLeft">+</button>
+								</div>
+							</label>
+							<label>Top
+								<div class="slider-row">
+									<button type="button" class="small-btn dec" data-target="bboxTop">−</button>
+									<input id="bboxTop" type="range" min="0" max="1" step="0.001" />
+									<button type="button" class="small-btn inc" data-target="bboxTop">+</button>
+								</div>
+							</label>
+							<label>Right
+								<div class="slider-row">
+									<button type="button" class="small-btn dec" data-target="bboxRight">−</button>
+									<input id="bboxRight" type="range" min="0" max="1" step="0.001" />
+									<button type="button" class="small-btn inc" data-target="bboxRight">+</button>
+								</div>
+							</label>
+							<label>Bottom
+								<div class="slider-row">
+									<button type="button" class="small-btn dec" data-target="bboxBottom">−</button>
+									<input id="bboxBottom" type="range" min="0" max="1" step="0.001" />
+									<button type="button" class="small-btn inc" data-target="bboxBottom">+</button>
+								</div>
+							</label>
+							<hr />
+							<div>
+								<p>Detected palette:</p>
+								<div id="previewPalette" class="palette"></div>
+							</div>
+							<div>
+								<label>Rows
+									<div class="num-row">
+										<button type="button" class="small-btn dec" data-target="previewRows">−</button>
+										<input id="previewRows" type="number" min="3" max="40" />
+										<button type="button" class="small-btn inc" data-target="previewRows">+</button>
+									</div>
+								</label>
+								<label>Cols
+									<div class="num-row">
+										<button type="button" class="small-btn dec" data-target="previewCols">−</button>
+										<input id="previewCols" type="number" min="3" max="40" />
+										<button type="button" class="small-btn inc" data-target="previewCols">+</button>
+									</div>
+								</label>
+							</div>
+							<div class="preview-actions">
+								<button id="confirmAnalyze" class="primary">Confirm &amp; Analyze</button>
+								<button id="useDetected" class="secondary">Use Detected</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</main>
+
+		<script src="logic.js"></script>
+	</body>
+</html>
