@@ -41,6 +41,16 @@
 					<button id="generateBtn" class="primary">Generate</button>
 				</div>
 
+				<div class="actions">
+					<button id="autoSolveBtn" class="secondary" disabled>
+						Solve Current Board
+					</button>
+					<button id="repaintBoardBtn" class="secondary" disabled>
+						Repaint Current Board
+					</button>
+					<button id="resetPaintBtn" class="secondary" disabled>Reset Paint</button>
+				</div>
+
 				<div class="import-box">
 					<p class="label-title">Image Mode</p>
 					<input id="imageInput" class="hidden-input" type="file" accept="image/*" />
@@ -50,13 +60,6 @@
 						<small>The parser detects the board and palette automatically.</small>
 					</div>
 						<button id="analyzeBtn" class="secondary">Analyze Image</button>
-				</div>
-
-				<div class="actions">
-					<button id="autoSolveBtn" class="secondary" disabled>
-						Done Painting &amp; Show Solution
-					</button>
-					<button id="resetPaintBtn" class="secondary" disabled>Reset Paint</button>
 				</div>
 
 				<div id="status" class="status" aria-live="polite">

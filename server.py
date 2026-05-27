@@ -77,6 +77,90 @@ def normalized_to_bbox(norm: tuple[float, float, float, float], image: Image.Ima
     return (left, top, right, bottom)
 
 
+def detect_grid_size(crop: Image.Image) -> tuple[int, int, int, int]:
+    gray = np.asarray(crop.convert("L"), dtype=np.float32)
+    if gray.size == 0:
+        return BOARD_ROWS, BOARD_COLS, 1, 1
+
+    def smooth_profile(profile: np.ndarray) -> np.ndarray:
+        window = max(3, int(round(profile.size * 0.02)))
+        if window % 2 == 0:
+            window += 1
+        kernel = np.ones(window, dtype=np.float32) / window
+        return np.convolve(profile, kernel, mode="same")
+
+    def estimate_period(profile: np.ndarray) -> int:
+        centered = profile - float(np.median(profile))
+        if centered.size < 3:
+            return max(1, centered.size)
+
+        min_period = max(2, centered.size // 30)
+        max_period = max(min_period + 1, centered.size // 2)
+        autocorr = np.correlate(centered, centered, mode="full")[centered.size - 1 :]
+        if autocorr.size <= min_period + 1:
+            return max(2, centered.size // max(BOARD_COLS, 1))
+
+        search = autocorr[min_period:max_period]
+        if search.size == 0:
+            return max(2, centered.size // max(BOARD_COLS, 1))
+
+        return max(2, int(np.argmax(search) + min_period))
+
+    def find_repeating_peaks(profile: np.ndarray) -> tuple[list[int], int]:
+        smoothed = smooth_profile(profile)
+        period = estimate_period(smoothed)
+        threshold = float(np.median(smoothed) + np.std(smoothed) * 0.35)
+        candidates = [
+            index
+            for index in range(1, smoothed.size - 1)
+            if smoothed[index] >= threshold
+            and smoothed[index] >= smoothed[index - 1]
+            and smoothed[index] > smoothed[index + 1]
+        ]
+
+        if not candidates:
+            candidates = list(np.argsort(smoothed)[-max(3, smoothed.size // max(period, 1)) :])
+
+        selected: list[int] = []
+        min_distance = max(2, int(period * 0.65))
+        for index in sorted(candidates, key=lambda item: smoothed[item], reverse=True):
+            if all(abs(index - existing) >= min_distance for existing in selected):
+                selected.append(index)
+
+        selected.sort()
+        if len(selected) >= 2:
+            spacings = np.diff(selected)
+            spacing = int(round(float(np.median(spacings))))
+        else:
+            spacing = period
+
+        return selected, max(1, spacing)
+
+    vertical_profile = 255.0 - gray.mean(axis=0)
+    horizontal_profile = 255.0 - gray.mean(axis=1)
+
+    vertical_peaks, cell_width = find_repeating_peaks(vertical_profile)
+    horizontal_peaks, cell_height = find_repeating_peaks(horizontal_profile)
+
+    if cell_width <= 0:
+        cell_width = max(1, int(round(crop.width / max(BOARD_COLS, 1))))
+    if cell_height <= 0:
+        cell_height = max(1, int(round(crop.height / max(BOARD_ROWS, 1))))
+
+    cols = max(1, int(round(crop.width / cell_width)) + 1)
+    rows = max(1, int(round(crop.height / cell_height)) + 1)
+
+    # Keep the detector stable when the projection is too weak to resolve peaks.
+    if len(vertical_peaks) < 2:
+        cols = BOARD_COLS
+        cell_width = max(1, int(round(crop.width / max(cols, 1))))
+    if len(horizontal_peaks) < 2:
+        rows = BOARD_ROWS
+        cell_height = max(1, int(round(crop.height / max(rows, 1))))
+
+    return rows, cols, cell_width, cell_height
+
+
 def detect_board_bbox(image: Image.Image) -> tuple[int, int, int, int] | None:
     """Detect the inner bounding box of the board using the black rounded border.
 
@@ -146,16 +230,16 @@ def parse_palette(image: Image.Image) -> tuple[list[str], list[tuple[int, int, i
     width, height = image.size
 
     # First try to segment the bottom palette strip into saturated components.
-    bottom_top = int(height * 0.76)
-    bottom_bottom = int(height * 0.93)
+    bottom_top = int(height * 0.81)
+    bottom_bottom = int(height * 0.83)
     strip = image.crop((0, bottom_top, width, bottom_bottom)).convert("RGB")
     arr = np.array(strip)
 
     if arr.size > 0:
         hsv = cv2.cvtColor(arr, cv2.COLOR_RGB2HSV) if cv2 is not None else None
         if hsv is not None:
-            # Exclude white/gray UI chrome by requiring saturation and avoiding near-white value.
-            mask = ((hsv[:, :, 1] > 45) & (hsv[:, :, 2] < 245)).astype(np.uint8) * 255
+            # Keep saturated, non-dark game colors; reject dark pixels instead of bright ones.
+            mask = ((hsv[:, :, 1] > 40) & (hsv[:, :, 2] > 50)).astype(np.uint8) * 255
             kernel = np.ones((3, 3), np.uint8)
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
 
@@ -226,20 +310,17 @@ def parse_palette(image: Image.Image) -> tuple[list[str], list[tuple[int, int, i
 
 
 def parse_board(
-    image: Image.Image,
+    crop: Image.Image,
     palette_keys: list[str],
     palette_rgbs: list[tuple[int, int, int]] | None = None,
-    bbox: tuple[int, int, int, int] | None = None,
+    rows: int | None = None,
+    cols: int | None = None,
+    cell_width: int | None = None,
+    cell_height: int | None = None,
 ) -> list[list[str]]:
-    if bbox is not None:
-        crop = image.crop(bbox).convert("RGB")
-    else:
-        # attempt to detect board bbox automatically
-        detected = detect_board_bbox(image)
-        if detected:
-            crop = image.crop(detected).convert("RGB")
-        else:
-            crop = crop_box(image, BOARD_BOX).convert("RGB")
+    crop = crop.convert("RGB")
+    if rows is None or cols is None or cell_width is None or cell_height is None:
+        rows, cols, cell_width, cell_height = detect_grid_size(crop)
     width, height = crop.size
     board: list[list[str]] = []
 
@@ -254,11 +335,11 @@ def parse_board(
         palette_rgb = [LOGICAL_COLORS[key] for key in LOGICAL_COLORS]
         palette_keys_used = list(LOGICAL_COLORS.keys())
 
-    for row in range(BOARD_ROWS):
+    for row in range(rows):
         row_values: list[str] = []
-        for col in range(BOARD_COLS):
-            x = min(width - 1, max(0, int((col + 0.5) * width / BOARD_COLS)))
-            y = min(height - 1, max(0, int((row + 0.5) * height / BOARD_ROWS)))
+        for col in range(cols):
+            x = min(width - 1, max(0, int((col + 0.5) * width / cols)))
+            y = min(height - 1, max(0, int((row + 0.5) * height / rows)))
             rgb = crop.getpixel((x, y))[:3]
 
             # Match sampled cell color to nearest palette sample color first
@@ -340,13 +421,27 @@ def analyze_image() -> object:
         except Exception:
             override_bbox = None
 
-    palette_keys, palette_rgbs = parse_palette(image)
     use_bbox = override_bbox if override_bbox is not None else detected_bbox
-    board = parse_board(image, palette_keys, palette_rgbs, bbox=use_bbox)
+    if use_bbox is not None:
+        crop = image.crop(use_bbox).convert("RGB")
+    else:
+        crop = crop_box(image, BOARD_BOX).convert("RGB")
+
+    rows, cols, cell_width, cell_height = detect_grid_size(crop)
+    palette_keys, palette_rgbs = parse_palette(image)
+    board = parse_board(
+        crop,
+        palette_keys,
+        palette_rgbs,
+        rows=rows,
+        cols=cols,
+        cell_width=cell_width,
+        cell_height=cell_height,
+    )
     return jsonify(
         {
-            "rows": BOARD_ROWS,
-            "cols": BOARD_COLS,
+            "rows": rows,
+            "cols": cols,
             "paletteKeys": palette_keys,
             "board": board,
         }
@@ -387,6 +482,12 @@ def analyze_preview() -> object:
         pass
 
     detected_bbox = detect_board_bbox(image)
+    if detected_bbox is not None:
+        crop = image.crop(detected_bbox).convert("RGB")
+    else:
+        crop = crop_box(image, BOARD_BOX).convert("RGB")
+
+    rows, cols, cell_width, cell_height = detect_grid_size(crop)
     palette_keys, palette_rgbs = parse_palette(image)
     norm_bbox = bbox_to_normalized(detected_bbox, image) if detected_bbox else None
 
@@ -395,8 +496,10 @@ def analyze_preview() -> object:
 
     return jsonify(
         {
-            "rows": BOARD_ROWS,
-            "cols": BOARD_COLS,
+            "rows": rows,
+            "cols": cols,
+            "cellWidth": cell_width,
+            "cellHeight": cell_height,
             "paletteKeys": palette_keys,
             "paletteRGBs": palette_rgb_list,
             "paletteLabels": palette_keys,

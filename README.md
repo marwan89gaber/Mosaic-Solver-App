@@ -9,9 +9,18 @@ Mosaic Solver App is a local web app for generating, analyzing, and solving Mosa
 - Import screenshots for automatic board detection and palette recognition.
 - Validate crop and palette before final analysis.
 
-## Screenshot
+## Preview
 
-![Mosaic Solver sample screenshot](Screenshot.png)
+This image shows the app UI. 
+
+![Mosaic Solver app screenshot](App-Screenshot.png)
+
+While this shows the type of screenshot the backend analyzes.
+
+![Sample screenshot used for analysis](Sample_Screenshot.jpg)
+
+The app screenshot highlights the manual board tools, image import flow, and the repaint workflow.
+The sample screenshot shows how the backend detects the board crop and palette from an uploaded image.
 
 ## Project Structure
 
@@ -20,7 +29,6 @@ Mosaic Solver App is a local web app for generating, analyzing, and solving Mosa
 - `logic.js` - front-end interaction, solver, and image workflow
 - `server.py` - Flask backend for image analysis
 - `requirements.txt` - Python dependencies
-- `Screenshot.png` - repository preview image
 
 ## Usage
 
@@ -50,12 +58,12 @@ http://127.0.0.1:5000
 1. Drag and drop a screenshot or click the upload area to choose one.
 2. Review the detected crop and palette in the preview window.
 3. Adjust the crop if needed, then confirm analysis.
-4. Review the parsed board and the generated solution guide.
+4. Use Repaint Current Board to reopen the detected board in paint mode with all six colors available.
+5. Solve the repainted board, or reset paint to return to the analyzed state.
 
 ## Notes
 
 - Screenshot analysis runs locally through the Flask backend.
-- Local environment folders such as `.venv/` are ignored by Git.
 
 ## Repository Name
 

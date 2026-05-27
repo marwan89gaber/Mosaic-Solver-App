@@ -22,6 +22,7 @@ const movesInput = document.getElementById("movesInput");
 const colorOptionsEl = document.getElementById("colorOptions");
 const generateBtn = document.getElementById("generateBtn");
 const autoSolveBtn = document.getElementById("autoSolveBtn");
+const repaintBoardBtn = document.getElementById("repaintBoardBtn");
 const resetPaintBtn = document.getElementById("resetPaintBtn");
 const statusEl = document.getElementById("status");
 const selectedColorNameEl = document.getElementById("selectedColorName");
@@ -648,6 +649,7 @@ function generateGameBoard() {
 	clearSolutionGuide();
 
 	autoSolveBtn.disabled = false;
+	repaintBoardBtn.disabled = false;
 	resetPaintBtn.disabled = false;
 
 	renderPalette();
@@ -673,6 +675,27 @@ function prepareSolutionGuide() {
 	}
 
 	return applySolutionGuide(cloneMatrix(matrix));
+}
+
+function enterPaintMode(statusText = "Repaint the board, then solve it.", allowAllColors = false) {
+	if (matrix.length === 0) {
+		setStatus("Create or analyze a board first.");
+		return;
+	}
+
+	if (allowAllColors) {
+		setAllowedColors(COLOR_KEYS);
+	}
+
+	initialPaintMatrix = cloneMatrix(matrix);
+	mode = "paint";
+	clearSolutionGuide();
+	autoSolveBtn.disabled = false;
+	repaintBoardBtn.disabled = false;
+	resetPaintBtn.disabled = false;
+	renderBoard();
+	updateMeta("-");
+	setStatus(statusText);
 }
 
 async function analyzeImageFile(file) {
@@ -878,8 +901,13 @@ async function analyzeImageConfirm(file, normBBox = null) {
 		matrix = payload.board;
 		initialPaintMatrix = cloneMatrix(matrix);
 		clearSolutionGuide();
+		mode = "preview";
+		autoSolveBtn.disabled = true;
+		repaintBoardBtn.disabled = false;
+		resetPaintBtn.disabled = true;
 		renderBoard();
 		updateMeta("-");
+		setStatus("Image analyzed. Repaint Current Board to edit it with all six colors, then solve.");
 
 		const solved = applySolutionGuide(cloneMatrix(matrix));
 		if (!solved) {
@@ -967,6 +995,12 @@ function init() {
 
 	generateBtn.addEventListener("click", generateGameBoard);
 	autoSolveBtn.addEventListener("click", runAutoSolve);
+	repaintBoardBtn.addEventListener("click", () => {
+		enterPaintMode(
+			"Repaint the current board with any of the six stored colors, then click Solve Current Board.",
+			true
+		);
+	});
 	resetPaintBtn.addEventListener("click", resetPaint);
 	analyzeBtn.addEventListener("click", () => {
 		analyzeImageFile(pendingImageFile || imageInput.files[0] || null);
