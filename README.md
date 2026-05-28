@@ -53,6 +53,13 @@ python server.py
 http://127.0.0.1:5000
 ```
 
+### Railway Deployment
+
+Access the Application through: https://web-production-a70bf.up.railway.app
+
+The application can then be accessed from any desktop or mobile browser.
+
+
 ### Image workflow
 
 1. Drag and drop a screenshot or click the upload area to choose one.
